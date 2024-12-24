@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { genSaltSync, hashSync } from 'bcrypt-ts';
-import { and, asc, desc, eq, gt, gte } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, sql, SQL } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
@@ -17,6 +17,7 @@ import {
   vote,
 } from './schema';
 import { BlockKind } from '@/components/block';
+import { UUID } from 'crypto';
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -24,21 +25,48 @@ import { BlockKind } from '@/components/block';
 
 // biome-ignore lint: Forbidden non-null assertion.
 const client = postgres(process.env.POSTGRES_URL!);
+
 const db = drizzle(client);
 
 export async function getUser(email: string): Promise<Array<User>> {
   try {
-    return await db.select().from(user).where(eq(user.email, email));
+   const result = db.select().from(user).where(eq(user.email, email));
+   return result
   } catch (error) {
     console.error('Failed to get user from database');
-    throw error;
+    return []
   }
 }
+export const getUserNamespaces = async (userId: UUID) => {
+  try{
+  const result = await db
+    .select({ namespaces: user.namespaces })
+    .from(user)
+    .where(eq(user.id, userId));
+  return result[0]?.namespaces ?? [];
+  }
+  catch(error){
+    console.error('no namespaces')
+    
+  }
+};
+export const addUserNamespace = async (userId: UUID,newNamespace:string)=>{
+  //SQL expression to add namespace to namespace array
+  // const finalSql: SQL = sql`array_append(namespaces, ${newNamespace})`;
+  // console.log(newNamespace)
+  // console.log(userId)
+  console.log('adding user namespace')
+  try {
+    return await db.update(user).set({ namespaces:sql`array_append(${user.namespaces},${newNamespace})`}).where(eq(user.id, userId));
+  } catch (error) {
+    console.error('Error updating namespaces', error);
+    
+  }
+  }
 
 export async function createUser(email: string, password: string) {
   const salt = genSaltSync(10);
   const hash = hashSync(password, salt);
-
   try {
     return await db.insert(user).values({ email, password: hash });
   } catch (error) {
